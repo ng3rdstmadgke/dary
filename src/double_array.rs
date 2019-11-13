@@ -256,6 +256,7 @@ impl<'a, T> Iterator for PrefixSearchIter<'a, T>  {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::trie::Trie;
 
     #[test]
     fn test_dictionary_set_new() {
@@ -268,4 +269,78 @@ mod tests {
         assert_eq!([10,20,30,40,50]     , check_arr);
         assert_eq!([100,200,300,400,500], data_arr);
     }
+
+    #[test]
+    fn test_get_1() {
+        let mut trie: Trie<u32> = Trie::new();
+        let s1 = String::from("abc");
+        let s2 = String::from("ac");
+        let s3 = String::from("b");
+        let s4 = String::from("bd");
+        let s5 = String::from("bdc");
+        trie.set(&s1, 1);
+        trie.set(&s1, 2);
+        trie.set(&s2, 3);
+        trie.set(&s3, 4);
+        trie.set(&s4, 5);
+        trie.set(&s5, 6);
+        let double_array = trie.to_double_array().ok().unwrap();
+        // debug_double_array(&base_arr, &check_arr, &data_arr);
+        // 登録されていて、data_arrに値が存在するkeyは対応する値を返す
+        assert_eq!([1, 2], double_array.get(&s1).unwrap());
+        assert_eq!([3],    double_array.get(&s2).unwrap());
+        assert_eq!([4],    double_array.get(&s3).unwrap());
+        assert_eq!([5],    double_array.get(&s4).unwrap());
+        assert_eq!([6],    double_array.get(&s5).unwrap());
+        // 登録されているが、data_arrに値が存在しないkeyはNoneを返す
+        assert_eq!(None, double_array.get("ab"));
+    }
+
+    #[test]
+    fn test_get_2() {
+        let mut trie: Trie<u32> = Trie::new();
+        let s1 = String::from("合沢");
+        let s2 = String::from("会沢");
+        let s3 = String::from("哀澤");
+        let s4 = String::from("愛沢");
+        let s5 = String::from("會澤");
+        trie.set(&s1, 1);
+        trie.set(&s1, 2);
+        trie.set(&s2, 3);
+        trie.set(&s3, 4);
+        trie.set(&s4, 5);
+        trie.set(&s5, 6);
+        let double_array = trie.to_double_array().ok().unwrap();
+        // debug_double_array(&base_arr, &check_arr, &data_arr);
+        // 登録されていて、data_arrに値が存在するkeyは対応する値を返す
+        assert_eq!([1, 2], double_array.get(&s1).unwrap());
+        assert_eq!([3],    double_array.get(&s2).unwrap());
+        assert_eq!([4],    double_array.get(&s3).unwrap());
+        assert_eq!([5],    double_array.get(&s4).unwrap());
+        assert_eq!([6],    double_array.get(&s5).unwrap());
+        // 登録されているが、data_arrに値が存在しないkeyはNoneを返す
+        assert_eq!(None, double_array.get("合い"));
+    }
+
+    #[test]
+    fn test_prefix_search_1() {
+        let mut trie: Trie<u32> = Trie::new();
+        let s1 = String::from("鳴ら");
+        let s2 = String::from("鳴らしゃ");
+        let s3 = String::from("鳴らし初め");
+        let s4 = String::from("鳴らし初めよ");
+        trie.set(&s1, 1);
+        trie.set(&s1, 2);
+        trie.set(&s2, 3);
+        trie.set(&s3, 4);
+        trie.set(&s4, 5);
+        let double_array = trie.to_double_array().ok().unwrap();
+        let key = String::from("鳴らし初めよ");
+        let result = double_array.prefix_search(&key);
+        let v: Vec<u32> = vec![1, 2, 4, 5];
+        assert_eq!(("鳴ら"       , &v[0..2]), result[0]);
+        assert_eq!(("鳴らし初め"  , &v[2..3]) , result[1]);
+        assert_eq!(("鳴らし初めよ", &v[3..4]) , result[2]);
+    }
+
 }
