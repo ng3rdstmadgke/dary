@@ -5,49 +5,36 @@ use std::io::prelude::*;
 use std::fs::File;
 use std::fs::OpenOptions;
 use std::ptr;
-use memmap::*;
 use std::marker::PhantomData;
 
+use crate::utils::*;
+
+use memmap::*;
+use bincode;
+use serde::Serialize;
+use serde::de::DeserializeOwned;
+
+#[derive(Debug)]
 pub struct DoubleArrayHeader {
     base_idx  : usize,
     check_idx : usize,
     data_idx  : usize,
     base_len  : usize,
     check_len : usize,
-    data_len  : usize,
 }
 
-pub struct DoubleArray<T: Debug> {
+#[derive(Debug)]
+pub struct DoubleArray<T: Serialize + DeserializeOwned + Debug> {
     mmap: Mmap,
     header: DoubleArrayHeader,
     phantom: PhantomData<T>,
 }
 
-impl<T: Debug> DoubleArray<T> {
+impl<T: Serialize + DeserializeOwned + Debug> DoubleArray<T> {
 
-    pub fn from_arrays(base_arr: Vec<u32>, check_arr: Vec<u32>, data_arr: Vec<T>) -> Result<Self, std::io::Error> {
-        // base をバイト列にする
-        let base_bytes: &[u8] = unsafe {
-            slice::from_raw_parts(
-                base_arr.as_ptr() as *const u8,
-                mem::size_of::<u32>() * base_arr.len()
-            )
-        };
-        // check をバイト列にする
-        let check_bytes: &[u8] = unsafe {
-            slice::from_raw_parts(
-                check_arr.as_ptr() as *const u8,
-                mem::size_of::<u32>() * check_arr.len()
-            )
-        };
-        // data をバイト列にする
-        let data_bytes: &[u8] = unsafe {
-            slice::from_raw_parts(
-                data_arr.as_ptr() as *const u8,
-                mem::size_of::<T>() * data_arr.len()
-            )
-        };
-
+    pub fn from_arrays(base_arr: &[u32], check_arr: &[u32], data_bytes: &[u8]) -> Result<Self, std::io::Error> {
+        let base_bytes = to_bytes(base_arr);
+        let check_bytes = to_bytes(check_arr);
         // headerの生成
         let header_size: usize = mem::size_of::<DoubleArrayHeader>();
         let header = DoubleArrayHeader {
@@ -56,7 +43,6 @@ impl<T: Debug> DoubleArray<T> {
             data_idx        : header_size + base_bytes.len() + check_bytes.len(),
             base_len        : base_arr.len(),
             check_len       : check_arr.len(),
-            data_len        : data_arr.len(),
         };
 
         // header をバイト列にする
@@ -73,7 +59,7 @@ impl<T: Debug> DoubleArray<T> {
         (&mut mmap_mut[..]).write_all(header_bytes)?;
         (&mut mmap_mut[header.base_idx..]).write_all(base_bytes)?;
         (&mut mmap_mut[header.check_idx..]).write_all(check_bytes)?;
-        (&mut mmap_mut[header.data_idx..]).write_all(data_bytes)?;
+        (&mut mmap_mut[header.data_idx..]).write_all(&data_bytes)?;
         let mmap: Mmap = mmap_mut.make_read_only()?;
         Ok(DoubleArray { mmap, header, phantom: PhantomData })
     }
@@ -109,7 +95,7 @@ impl<T: Debug> DoubleArray<T> {
         Self::from_file(output_path)
     }
 
-    fn get_arrays(&self) -> (&[u32], &[u32], &[T]) {
+    fn get_arrays(&self) -> (&[u32], &[u32], &[u8]) {
         // base_arr
         let base_arr: &[u32] = unsafe {
             slice::from_raw_parts(
@@ -127,12 +113,7 @@ impl<T: Debug> DoubleArray<T> {
         };
 
         // data_arr
-        let data_arr: &[T] = unsafe {
-            slice::from_raw_parts(
-                (&self.mmap)[self.header.data_idx..].as_ptr() as *const T,
-                self.header.data_len
-            )
-        };
+        let data_arr: &[u8] = &self.mmap[self.header.data_idx..];
 
         (base_arr, check_arr, data_arr)
     }
@@ -145,7 +126,7 @@ impl<T: Debug> DoubleArray<T> {
     /// # Arguments
     ///
     /// * `key`       - 探索対象の文字列
-    pub fn get(&self, key: &str) -> Option<&[T]> {
+    pub fn get(&self, key: &str) -> Option<Vec<T>> {
         let (base_arr, check_arr, data_arr) = self.get_arrays();
 
         let mut idx  = 1;
@@ -161,9 +142,9 @@ impl<T: Debug> DoubleArray<T> {
         }
         let value_idx = base + (u8::max_value() as usize);
         if check_arr[value_idx] as usize == idx {
-            let data_idx = (base_arr[value_idx] >> 8) as usize;
-            let data_len = (base_arr[value_idx] & 0b11111111) as usize;
-            Some(&data_arr[data_idx..(data_idx + data_len)])
+            let data_idx = base_arr[value_idx] as usize;
+            let data: Vec<T> = bincode::deserialize(&data_arr[data_idx..]).unwrap();
+            Some(data)
         } else {
             None
         }
@@ -175,9 +156,9 @@ impl<T: Debug> DoubleArray<T> {
     /// # Arguments
     ///
     /// * `key`       - 探索対象の文字列
-    pub fn prefix_search<'a>(&self, key: &'a str) -> Vec<(&'a str, &[T])> {
+    pub fn prefix_search<'a>(&self, key: &'a str) -> Vec<(&'a str, Vec<T>)> {
         let (base_arr, check_arr, data_arr) = self.get_arrays();
-        let mut ret: Vec<(&str, &[T])> = Vec::new();
+        let mut ret: Vec<(&str, Vec<T>)> = Vec::new();
         let mut idx = 1;
         let mut base = base_arr[idx] as usize;
 
@@ -192,9 +173,9 @@ impl<T: Debug> DoubleArray<T> {
             // value があれば戻り値の配列に追加
             let value_idx = base + (u8::max_value() as usize);
             if check_arr[value_idx] as usize == idx {
-                let data_idx = (base_arr[value_idx] >> 8) as usize;
-                let data_len = (base_arr[value_idx] & 0b11111111) as usize;
-                ret.push((&key[0..(i + 1)], &data_arr[data_idx..(data_idx + data_len)]));
+                let data_idx = base_arr[value_idx] as usize;
+                let data: Vec<T> = bincode::deserialize(&data_arr[data_idx..]).unwrap();
+                ret.push((&key[0..(i + 1)], data));
             }
         }
         ret
@@ -257,17 +238,34 @@ impl<'a, T> Iterator for PrefixSearchIter<'a, T>  {
 mod tests {
     use super::*;
     use crate::trie::Trie;
+    use std::fmt::Debug;
+    use serde_derive::{Serialize, Deserialize};
+
+    #[derive(Serialize, Deserialize, Debug, PartialEq)]
+    struct MorphemeData {
+        surface: String,
+        cost: i32,
+    }
+
+    impl MorphemeData {
+        fn new(surface: &str, cost: i32) -> Self {
+            MorphemeData {
+                surface: surface.to_string(),
+                cost: cost
+            }
+        }
+    }
 
     #[test]
     fn test_dictionary_set_new() {
         let base_arr: Vec<u32> = vec![1,2,3,4,5];
         let check_arr: Vec<u32> = vec![10,20,30,40,50];
-        let data_arr: Vec<u32> = vec![100,200,300,400,500];
-        let double_array: DoubleArray<u32> = DoubleArray::from_arrays(base_arr, check_arr, data_arr).ok().unwrap();
+        let data_arr: Vec<u8> = vec![100,110,120,130,140];
+        let double_array: DoubleArray<u32> = DoubleArray::from_arrays(&base_arr, &check_arr, &data_arr).ok().unwrap();
         let (base_arr, check_arr, data_arr) = double_array.get_arrays();
         assert_eq!([1,2,3,4,5]          , base_arr);
         assert_eq!([10,20,30,40,50]     , check_arr);
-        assert_eq!([100,200,300,400,500], data_arr);
+        assert_eq!([100,110,120,130,140], data_arr);
     }
 
     #[test]
@@ -287,11 +285,11 @@ mod tests {
         let double_array = trie.to_double_array().ok().unwrap();
         // debug_double_array(&base_arr, &check_arr, &data_arr);
         // 登録されていて、data_arrに値が存在するkeyは対応する値を返す
-        assert_eq!([1, 2], double_array.get(&s1).unwrap());
-        assert_eq!([3],    double_array.get(&s2).unwrap());
-        assert_eq!([4],    double_array.get(&s3).unwrap());
-        assert_eq!([5],    double_array.get(&s4).unwrap());
-        assert_eq!([6],    double_array.get(&s5).unwrap());
+        assert_eq!(vec![1, 2], double_array.get(&s1).unwrap());
+        assert_eq!(vec![3],    double_array.get(&s2).unwrap());
+        assert_eq!(vec![4],    double_array.get(&s3).unwrap());
+        assert_eq!(vec![5],    double_array.get(&s4).unwrap());
+        assert_eq!(vec![6],    double_array.get(&s5).unwrap());
         // 登録されているが、data_arrに値が存在しないkeyはNoneを返す
         assert_eq!(None, double_array.get("ab"));
     }
@@ -313,11 +311,37 @@ mod tests {
         let double_array = trie.to_double_array().ok().unwrap();
         // debug_double_array(&base_arr, &check_arr, &data_arr);
         // 登録されていて、data_arrに値が存在するkeyは対応する値を返す
-        assert_eq!([1, 2], double_array.get(&s1).unwrap());
-        assert_eq!([3],    double_array.get(&s2).unwrap());
-        assert_eq!([4],    double_array.get(&s3).unwrap());
-        assert_eq!([5],    double_array.get(&s4).unwrap());
-        assert_eq!([6],    double_array.get(&s5).unwrap());
+        assert_eq!(vec![1, 2], double_array.get(&s1).unwrap());
+        assert_eq!(vec![3],    double_array.get(&s2).unwrap());
+        assert_eq!(vec![4],    double_array.get(&s3).unwrap());
+        assert_eq!(vec![5],    double_array.get(&s4).unwrap());
+        assert_eq!(vec![6],    double_array.get(&s5).unwrap());
+        // 登録されているが、data_arrに値が存在しないkeyはNoneを返す
+        assert_eq!(None, double_array.get("合い"));
+    }
+
+    #[test]
+    fn test_get_3() {
+        let mut trie: Trie<MorphemeData> = Trie::new();
+        let s1 = String::from("合沢");
+        let s2 = String::from("会沢");
+        let s3 = String::from("哀澤");
+        let s4 = String::from("愛沢");
+        let s5 = String::from("會澤");
+        trie.set(&s1, MorphemeData::new("合沢", 1));
+        trie.set(&s1, MorphemeData::new("合沢", 2));
+        trie.set(&s2, MorphemeData::new("会沢", 3));
+        trie.set(&s3, MorphemeData::new("哀澤", 4));
+        trie.set(&s4, MorphemeData::new("愛沢", 5));
+        trie.set(&s5, MorphemeData::new("會澤", 6));
+        let double_array = trie.to_double_array().ok().unwrap();
+        // debug_double_array(&base_arr, &check_arr, &data_arr);
+        // 登録されていて、data_arrに値が存在するkeyは対応する値を返す
+        assert_eq!(vec![MorphemeData::new("合沢", 1), MorphemeData::new("合沢", 2)], double_array.get(&s1).unwrap());
+        assert_eq!(vec![MorphemeData::new("会沢", 3)], double_array.get(&s2).unwrap());
+        assert_eq!(vec![MorphemeData::new("哀澤", 4)], double_array.get(&s3).unwrap());
+        assert_eq!(vec![MorphemeData::new("愛沢", 5)], double_array.get(&s4).unwrap());
+        assert_eq!(vec![MorphemeData::new("會澤", 6)], double_array.get(&s5).unwrap());
         // 登録されているが、data_arrに値が存在しないkeyはNoneを返す
         assert_eq!(None, double_array.get("合い"));
     }
@@ -337,10 +361,9 @@ mod tests {
         let double_array = trie.to_double_array().ok().unwrap();
         let key = String::from("鳴らし初めよ");
         let result = double_array.prefix_search(&key);
-        let v: Vec<u32> = vec![1, 2, 4, 5];
-        assert_eq!(("鳴ら"       , &v[0..2]), result[0]);
-        assert_eq!(("鳴らし初め"  , &v[2..3]) , result[1]);
-        assert_eq!(("鳴らし初めよ", &v[3..4]) , result[2]);
+        assert_eq!(("鳴ら"       , vec![1, 2]), result[0]);
+        assert_eq!(("鳴らし初め"  , vec![4]) , result[1]);
+        assert_eq!(("鳴らし初めよ", vec![5]) , result[2]);
     }
 
 }
