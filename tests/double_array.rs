@@ -10,6 +10,21 @@ use rand::{Rng, thread_rng};
 use rand::distributions::Alphanumeric;
 use serde_derive::{Serialize, Deserialize};
 
+#[derive(Serialize, Deserialize, Debug, PartialEq)]
+struct MorphemeData {
+    surface: String,
+    cost: usize,
+}
+
+impl MorphemeData {
+    fn new(surface: &str, cost: usize) -> Self {
+        MorphemeData {
+            surface: surface.to_string(),
+            cost: cost
+        }
+    }
+}
+
 
 #[test]
 fn double_array_1() {
@@ -59,21 +74,6 @@ fn double_array_2() {
 	}
 
 	fs::remove_file(path).unwrap();
-}
-
-#[derive(Serialize, Deserialize, Debug, PartialEq)]
-struct MorphemeData {
-    surface: String,
-    cost: usize,
-}
-
-impl MorphemeData {
-    fn new(surface: &str, cost: usize) -> Self {
-        MorphemeData {
-            surface: surface.to_string(),
-            cost: cost
-        }
-    }
 }
 
 #[test]

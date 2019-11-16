@@ -47,12 +47,8 @@ impl<T: Serialize + DeserializeOwned + Debug> Trie<T> {
                 }
             }
         }
-        if node.values.len() < 256 {
-            self.len += 1;
-            node.values.push(value);
-        } else {
-            panic!("登録できる値は1つのkeyに256個までです。")
-        }
+        self.len += 1;
+        node.values.push(value);
     }
 
     /// trieを探索する
