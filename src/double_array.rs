@@ -32,6 +32,13 @@ pub struct DoubleArray<T: Serialize + DeserializeOwned + Debug> {
 
 impl<T: Serialize + DeserializeOwned + Debug> DoubleArray<T> {
 
+    /// base配列, check配列, data配列からDoubleArrayインスタンスを生成する。
+    ///
+    /// # Arguments
+    ///
+    /// * `base_arr`   - base配列
+    /// * `check_arr`  - check配列
+    /// * `data_bytes` - data配列
     pub fn from_arrays(base_arr: &[u32], check_arr: &[u32], data_bytes: &[u8]) -> Result<Self, std::io::Error> {
         let base_bytes = to_bytes(base_arr);
         let check_bytes = to_bytes(check_arr);
@@ -64,6 +71,11 @@ impl<T: Serialize + DeserializeOwned + Debug> DoubleArray<T> {
         Ok(DoubleArray { mmap, header, phantom: PhantomData })
     }
 
+    /// u8の配列からDoubleArrayインスタンスを生成する。
+    ///
+    /// # Arguments
+    ///
+    /// * `bytes` - base配列, check配列, data配列を u8 の配列として連結させた配列
     pub fn from_slice(bytes: &[u8]) -> Result<Self, std::io::Error> {
         let mut mmap_options = MmapOptions::new();
         let mut mmap_mut: MmapMut = mmap_options.len(bytes.len()).map_anon()?;
@@ -75,6 +87,11 @@ impl<T: Serialize + DeserializeOwned + Debug> DoubleArray<T> {
         Ok(DoubleArray { mmap, header, phantom: PhantomData })
     }
 
+    /// ファイルからDoubleArrayインスタンスを生成する。
+    ///
+    /// # Arguments
+    ///
+    /// * `dictionary_path` - 辞書ファイルパス
     pub fn from_file(dictionary_path: &str) -> Result<Self, std::io::Error> {
         let file: File = File::open(dictionary_path)?;
         let mmap: Mmap = unsafe {
@@ -86,6 +103,11 @@ impl<T: Serialize + DeserializeOwned + Debug> DoubleArray<T> {
         Ok(DoubleArray { mmap, header, phantom: PhantomData })
     }
 
+    /// DoubleArrayをファイルにダンプする
+    ///
+    /// # Arguments
+    ///
+    /// * `output_path` - 辞書ファイルパス
     pub fn dump(self, output_path: &str) -> Result<Self, std::io::Error> {
         let file: File = OpenOptions::new().read(true).write(true).create(true).open(output_path)?;
         file.set_len(self.mmap.len() as u64)?;
@@ -95,6 +117,11 @@ impl<T: Serialize + DeserializeOwned + Debug> DoubleArray<T> {
         Self::from_file(output_path)
     }
 
+    /// mmapをパースして、base配列, check配列, data配列 を返す。
+    ///
+    /// # Arguments
+    ///
+    /// * `output_path` - 辞書ファイルパス
     fn get_arrays(&self) -> (&[u32], &[u32], &[u8]) {
         // base_arr
         let base_arr: &[u32] = unsafe {
