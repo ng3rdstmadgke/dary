@@ -1,7 +1,11 @@
+use std::fmt::Debug;
+
 use crate::bit_cache::BitCache;
 use crate::double_array::DoubleArray;
 
-use std::fmt::Debug;
+use bincode;
+use serde::Serialize;
+use serde::de::DeserializeOwned;
 
 struct Node<T> {
     key   : u8,
@@ -9,12 +13,12 @@ struct Node<T> {
     nexts : Vec<Node<T>>,
 }
 
-pub struct Trie<T: Copy + Debug> {
+pub struct Trie<T: Serialize + DeserializeOwned + Debug> {
     root: Node<T>,
     len: usize,
 }
 
-impl<T: Copy + Debug> Trie<T> {
+impl<T: Serialize + DeserializeOwned + Debug> Trie<T> {
     pub fn new() -> Trie<T> {
         Trie {
             root: Node { key: 0, values: Vec::new(), nexts: Vec::new() },
@@ -87,7 +91,7 @@ impl<T: Copy + Debug> Trie<T> {
         let mut len = if max_key > (4 * self.len) { max_key } else { 4 * self.len };
         let mut base_arr: Vec<u32>  = vec![0; len];
         let mut check_arr: Vec<u32> = vec![0; len];
-        let mut data_arr: Vec<T>    = Vec::with_capacity(self.len);
+        let mut data_arr: Vec<u8>   = Vec::with_capacity(self.len);
         let mut bit_cache: BitCache = BitCache::new();
         bit_cache.set(0);
         bit_cache.set(1);
@@ -124,9 +128,10 @@ impl<T: Copy + Debug> Trie<T> {
                 if n.key == u8::max_value() {
                     // valueノードの登録
                     // baseには「24bit: dataのindex, 8bit: 長さ」を格納する
-                    base_arr[i]  = ((data_arr.len() << 8) | node.values.len() & 0b11111111) as u32;
+                    base_arr[i]  = data_arr.len() as u32;
                     // dataには末尾にvaluesを追加する
-                    data_arr.extend_from_slice(&node.values);
+                    let data = bincode::serialize(&node.values).unwrap();
+                    data_arr.extend_from_slice(&data);
                 } else {
                     // 通常ノードの登録
                     stack.push((i, n));
@@ -141,7 +146,7 @@ impl<T: Copy + Debug> Trie<T> {
         };
         base_arr.resize(new_len, 0);
         check_arr.resize(new_len, 0);
-        DoubleArray::from_arrays(base_arr, check_arr, data_arr)
+        DoubleArray::from_arrays(&base_arr, &check_arr, &data_arr)
     }
 
     /// 新しいbase値を探索するメソッド
@@ -178,7 +183,7 @@ impl<T: Copy + Debug> Trie<T> {
 
 /// ダブル配列をデバッグ目的で表示するための関数
 #[allow(dead_code)]
-fn debug_double_array<T: std::fmt::Debug>(base_arr: &[u32], check_arr: &[u32], data_arr: &[T]) {
+fn debug_double_array<T:  Serialize + DeserializeOwned + Debug>(base_arr: &[u32], check_arr: &[u32], data_arr: &[u8]) {
     println!("size: base={}, check={}, data={}", base_arr.len(), check_arr.len(), data_arr.len());
     println!("{:-10} | {:-10} | {:-10} |", "index", "base", "check");
     println!("{:-10} | {:-10} | {:-10} |", 0, base_arr[0], check_arr[0]);
@@ -187,14 +192,14 @@ fn debug_double_array<T: std::fmt::Debug>(base_arr: &[u32], check_arr: &[u32], d
         let check = check_arr[i];
         if  check != 0 {
             if i == base_arr[check as usize] as usize {
-                let data_idx = (base_arr[i] >> 8) as usize;
-                let data_len = (base_arr[i] & 0b11111111) as usize;
+                let data_idx = base_arr[i] as usize;
+                let data: Vec<T> = bincode::deserialize(&data_arr[data_idx..]).unwrap();
                 println!(
                     "{:-10} | {:-10} | {:-10} | {:?}",
                     i,
                     base_arr[i],
                     check_arr[i],
-                    &data_arr[data_idx..(data_idx + data_len)],
+                    data,
                 );
             } else {
                 println!(
@@ -332,11 +337,11 @@ mod tests {
         let double_array = trie.to_double_array().ok().unwrap();
         // debug_double_array(&base_arr, &check_arr, &data_arr);
         // 登録されていて、data_arrに値が存在するkeyは対応する値を返す
-        assert_eq!([1, 2], double_array.get(&s1).unwrap());
-        assert_eq!([3],    double_array.get(&s2).unwrap());
-        assert_eq!([4],    double_array.get(&s3).unwrap());
-        assert_eq!([5],    double_array.get(&s4).unwrap());
-        assert_eq!([6],    double_array.get(&s5).unwrap());
+        assert_eq!(vec![1, 2], double_array.get(&s1).unwrap());
+        assert_eq!(vec![3],    double_array.get(&s2).unwrap());
+        assert_eq!(vec![4],    double_array.get(&s3).unwrap());
+        assert_eq!(vec![5],    double_array.get(&s4).unwrap());
+        assert_eq!(vec![6],    double_array.get(&s5).unwrap());
         // 登録されているが、data_arrに値が存在しないkeyはNoneを返す
         assert_eq!(None, double_array.get("ab"));
     }
@@ -362,9 +367,9 @@ mod tests {
         trie.set(&s3, 4);
         let double_array = trie.to_double_array().ok().unwrap();
         // 登録されていて、data_arrに値が存在するkeyは対応する値を返す
-        assert_eq!([1, 2], double_array.get(&s1).unwrap());
-        assert_eq!([3]   , double_array.get(&s2).unwrap());
-        assert_eq!([4]   , double_array.get(&s3).unwrap());
+        assert_eq!(vec![1, 2], double_array.get(&s1).unwrap());
+        assert_eq!(vec![3]   , double_array.get(&s2).unwrap());
+        assert_eq!(vec![4]   , double_array.get(&s3).unwrap());
         // 登録されているが、data_arrに値が存在しないkeyはNoneを返す
         assert_eq!(None, double_array.get("お寿"));
     }
