@@ -23,6 +23,44 @@ struct DoubleArrayHeader {
     check_len : usize,
 }
 
+/// ダブル配列の実装。
+///
+/// # Examples
+///
+/// ```
+/// use std::fmt::Debug;
+/// use dary::DoubleArray;
+/// use dary::Trie;
+/// use serde_derive::{Serialize, Deserialize};
+/// 
+/// fn main() {
+///   let key1 = String::from("foo");
+///   let key2 = String::from("bar");
+///   let key3 = String::from("baz");
+/// 
+///   let sample1 = Sample { surface: key1.clone(), cost: 1 };
+///   let sample2 = Sample { surface: key1.clone(), cost: 2 };
+///   let sample3 = Sample { surface: key2.clone(), cost: 1 };
+///   let sample4 = Sample { surface: key3.clone(), cost: 1 };
+/// 
+///   let mut trie: Trie<Sample> = Trie::new();
+///   trie.set(&key1, sample1.clone());
+///   trie.set(&key1, sample2.clone());
+///   trie.set(&key2, sample3.clone());
+///   trie.set(&key3, sample4.clone());
+/// 
+///   let double_array = trie.to_double_array().ok().unwrap();
+///   assert_eq!(vec![sample1, sample2], double_array.get(&key1).unwrap());
+///   assert_eq!(vec![sample3]         , double_array.get(&key2).unwrap());
+///   assert_eq!(vec![sample4]         , double_array.get(&key3).unwrap());
+/// }
+/// 
+/// #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+/// struct Sample {
+///     surface: String,
+///     cost: usize,
+/// }
+/// ```
 #[derive(Debug)]
 pub struct DoubleArray<T: Serialize + DeserializeOwned + Debug> {
     mmap: Mmap,
