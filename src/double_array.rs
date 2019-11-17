@@ -208,58 +208,86 @@ impl<T: Serialize + DeserializeOwned + Debug> DoubleArray<T> {
         ret
     }
 
+    pub fn prefix_search_iter<'a>(&'a self, key: &'a str) -> PrefixSearchIter<'a, T> {
+        let (base_arr, check_arr, data_arr) = self.get_arrays();
+        PrefixSearchIter {
+            key_ptr: 0,
+            key: key,
+            arr_ptr: 1,
+            base_arr: base_arr,
+            check_arr: check_arr,
+            data_arr: data_arr,
+            phantom: PhantomData,
+        }
+    }
+
 
     /// ダブル配列をデバッグ目的で表示するための関数
     #[allow(dead_code)]
-    pub fn debug_double_array(&self, len: usize) {
+    fn debug_double_array(&self, mut len: usize) {
         let (base_arr, check_arr, data_arr) = self.get_arrays();
         println!("size: base={}, check={}, data={}", base_arr.len(), check_arr.len(), data_arr.len());
-        println!("{:-10} | {:-10} | {:-10} |", "index", "base", "check");
+        println!("{:-10} | {:-10} | {:-10} | {:-10}", "index", "base", "check", "data");
         println!("{:-10} | {:-10} | {:-10} |", 0, base_arr[0], check_arr[0]);
         println!("{:-10} | {:-10} | {:-10} |", 1, base_arr[1], check_arr[1]);
+
+        len = if len < base_arr.len() { len } else { base_arr.len() };
         for i in 2..len {
-            let check = check_arr[i];
+            let check = check_arr[i] as usize;
+            let base  = base_arr[i] as usize;
             if  check != 0 {
-                if i == base_arr[check as usize] as usize {
-                    let data_idx = (base_arr[i] >> 8) as usize;
-                    let data_len = (base_arr[i] & 0b11111111) as usize;
-                    println!(
-                        "{:-10} | {:-10} | {:-10} | {:?}",
-                        i,
-                        base_arr[i],
-                        check_arr[i],
-                        &data_arr[data_idx..(data_idx + data_len)],
-                        );
+                if (base_arr[check] as usize) + (u8::max_value() as usize) == i {
+                    // 遷移前のbase値と255を足した値が現在のインデックスと等しいとき、dataが存在する
+                    let data: Vec<T> = bincode::deserialize(&data_arr[base..]).unwrap();
+                    println!( "{:-10} | {:-10} | {:-10} | {:?}", i, base, check, data);
                 } else {
-                    println!(
-                        "{:-10} | {:-10} | {:-10} |",
-                        i,
-                        base_arr[i],
-                        check_arr[i],
-                        );
+                    println!( "{:-10} | {:-10} | {:-10} |", i, base, check);
                 }
             }
         }
     }
 }
 
-/*
 use std::iter::Iterator;
-struct PrefixSearchIter<'a, T> {
-    idx      : usize,
+pub struct PrefixSearchIter<'a, T>
+    where T: Serialize + DeserializeOwned + Debug,
+{
+    key_ptr  : usize,
+    key      : &'a str,
+    arr_ptr  : usize,
     base_arr : &'a [u32],
     check_arr: &'a [u32],
-    data_arr : &'a [T],
+    data_arr : &'a [u8],
+    phantom: PhantomData<T>,
 }
 
-impl<'a, T> Iterator for PrefixSearchIter<'a, T>  {
-    type Item =  &'a [T];
+impl<'a, T> Iterator for PrefixSearchIter<'a, T>
+    where T: Serialize + DeserializeOwned + Debug,
+{
+    type Item =  (&'a str, Vec<T>);
 
-    fn next(&mut self) -> Option<&'a [T]> {
-        Some(&self.data_arr[0..1])
+    fn next(&mut self) -> Option<(&'a str, Vec<T>)> {
+        let mut base = self.base_arr[self.arr_ptr] as usize;
+
+        while self.key_ptr < self.key.len() {
+            let next_arr_ptr = base + (self.key.as_bytes()[self.key_ptr] as usize);
+            self.key_ptr += 1;
+            if self.check_arr[next_arr_ptr] as usize != self.arr_ptr {
+                return None;
+            }
+            self.arr_ptr = next_arr_ptr;
+            base = self.base_arr[self.arr_ptr] as usize;
+
+            let value_idx = base + (u8::max_value() as usize);
+            if self.check_arr[value_idx] as usize == self.arr_ptr {
+                let data_idx = self.base_arr[value_idx] as usize;
+                let data: Vec<T> = bincode::deserialize(&self.data_arr[data_idx..]).unwrap();
+                return Some((&self.key[0..self.key_ptr], data));
+            }
+        }
+        None
     }
 }
-*/
 
 #[cfg(test)]
 mod tests {
@@ -336,7 +364,6 @@ mod tests {
         trie.set(&s4, 5);
         trie.set(&s5, 6);
         let double_array = trie.to_double_array().ok().unwrap();
-        // debug_double_array(&base_arr, &check_arr, &data_arr);
         // 登録されていて、data_arrに値が存在するkeyは対応する値を返す
         assert_eq!(vec![1, 2], double_array.get(&s1).unwrap());
         assert_eq!(vec![3],    double_array.get(&s2).unwrap());
@@ -362,7 +389,6 @@ mod tests {
         trie.set(&s4, MorphemeData::new("愛沢", 5));
         trie.set(&s5, MorphemeData::new("會澤", 6));
         let double_array = trie.to_double_array().ok().unwrap();
-        // debug_double_array(&base_arr, &check_arr, &data_arr);
         // 登録されていて、data_arrに値が存在するkeyは対応する値を返す
         assert_eq!(vec![MorphemeData::new("合沢", 1), MorphemeData::new("合沢", 2)], double_array.get(&s1).unwrap());
         assert_eq!(vec![MorphemeData::new("会沢", 3)], double_array.get(&s2).unwrap());
@@ -393,4 +419,24 @@ mod tests {
         assert_eq!(("鳴らし初めよ", vec![5]) , result[2]);
     }
 
+    #[test]
+    fn test_prefix_search_2() {
+        let mut trie: Trie<u32> = Trie::new();
+        let s1 = String::from("鳴ら");
+        let s2 = String::from("鳴らしゃ");
+        let s3 = String::from("鳴らし初め");
+        let s4 = String::from("鳴らし初めよ");
+        trie.set(&s1, 1);
+        trie.set(&s1, 2);
+        trie.set(&s2, 3);
+        trie.set(&s3, 4);
+        trie.set(&s4, 5);
+        let double_array = trie.to_double_array().ok().unwrap();
+        // double_array.debug_double_array(555);
+        let key = String::from("鳴らし初めよ");
+        let result: Vec<(&str, Vec<u32>)> = double_array.prefix_search_iter(&key).collect();
+        assert_eq!(("鳴ら"       , vec![1, 2]), result[0]);
+        assert_eq!(("鳴らし初め"  , vec![4]) , result[1]);
+        assert_eq!(("鳴らし初めよ", vec![5]) , result[2]);
+    }
 }

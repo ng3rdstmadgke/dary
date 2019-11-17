@@ -123,9 +123,9 @@ impl<T: Serialize + DeserializeOwned + Debug> Trie<T> {
                 check_arr[i] = curr_idx as u32;
                 if n.key == u8::max_value() {
                     // valueノードの登録
-                    // baseには「24bit: dataのindex, 8bit: 長さ」を格納する
+                    // base には data の開始 index を格納する
                     base_arr[i]  = data_arr.len() as u32;
-                    // dataには末尾にvaluesを追加する
+                    // data には末尾に values を追加する
                     let data = bincode::serialize(&node.values).unwrap();
                     data_arr.extend_from_slice(&data);
                 } else {
@@ -173,38 +173,6 @@ impl<T: Serialize + DeserializeOwned + Debug> Trie<T> {
                 }
             }
             return new_base;
-        }
-    }
-}
-
-/// ダブル配列をデバッグ目的で表示するための関数
-#[allow(dead_code)]
-fn debug_double_array<T:  Serialize + DeserializeOwned + Debug>(base_arr: &[u32], check_arr: &[u32], data_arr: &[u8]) {
-    println!("size: base={}, check={}, data={}", base_arr.len(), check_arr.len(), data_arr.len());
-    println!("{:-10} | {:-10} | {:-10} |", "index", "base", "check");
-    println!("{:-10} | {:-10} | {:-10} |", 0, base_arr[0], check_arr[0]);
-    println!("{:-10} | {:-10} | {:-10} |", 1, base_arr[1], check_arr[1]);
-    for i in 2..base_arr.len() {
-        let check = check_arr[i];
-        if  check != 0 {
-            if i == base_arr[check as usize] as usize {
-                let data_idx = base_arr[i] as usize;
-                let data: Vec<T> = bincode::deserialize(&data_arr[data_idx..]).unwrap();
-                println!(
-                    "{:-10} | {:-10} | {:-10} | {:?}",
-                    i,
-                    base_arr[i],
-                    check_arr[i],
-                    data,
-                );
-            } else {
-                println!(
-                    "{:-10} | {:-10} | {:-10} |",
-                    i,
-                    base_arr[i],
-                    check_arr[i],
-                );
-            }
         }
     }
 }
@@ -331,7 +299,6 @@ mod tests {
         trie.set(&s4, 5);
         trie.set(&s5, 6);
         let double_array = trie.to_double_array().ok().unwrap();
-        // debug_double_array(&base_arr, &check_arr, &data_arr);
         // 登録されていて、data_arrに値が存在するkeyは対応する値を返す
         assert_eq!(vec![1, 2], double_array.get(&s1).unwrap());
         assert_eq!(vec![3],    double_array.get(&s2).unwrap());
