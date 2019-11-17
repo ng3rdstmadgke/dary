@@ -1,6 +1,6 @@
 use std::fmt::Debug;
 
-use crate::bit_cache::BitCache;
+use super::bit_cache::BitCache;
 use crate::double_array::DoubleArray;
 
 use bincode;
@@ -13,6 +13,45 @@ struct Node<T> {
     nexts : Vec<Node<T>>,
 }
 
+/// トライ木の実装。
+/// ダブル配列は直接構築することはできないので、トライ木を構築してから変換することで構築する。
+///
+/// # Examples
+///
+/// ```
+/// use std::fmt::Debug;
+/// use dary::DoubleArray;
+/// use dary::Trie;
+/// use serde_derive::{Serialize, Deserialize};
+/// 
+/// fn main() {
+///   let key1 = String::from("foo");
+///   let key2 = String::from("bar");
+///   let key3 = String::from("baz");
+/// 
+///   let sample1 = Sample { surface: key1.clone(), cost: 1 };
+///   let sample2 = Sample { surface: key1.clone(), cost: 2 };
+///   let sample3 = Sample { surface: key2.clone(), cost: 1 };
+///   let sample4 = Sample { surface: key3.clone(), cost: 1 };
+/// 
+///   let mut trie: Trie<Sample> = Trie::new();
+///   trie.set(&key1, sample1.clone());
+///   trie.set(&key1, sample2.clone());
+///   trie.set(&key2, sample3.clone());
+///   trie.set(&key3, sample4.clone());
+/// 
+///   let double_array = trie.to_double_array().ok().unwrap();
+///   assert_eq!(vec![sample1, sample2], double_array.get(&key1).unwrap());
+///   assert_eq!(vec![sample3]         , double_array.get(&key2).unwrap());
+///   assert_eq!(vec![sample4]         , double_array.get(&key3).unwrap());
+/// }
+/// 
+/// #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+/// struct Sample {
+///     surface: String,
+///     cost: usize,
+/// }
+/// ```
 pub struct Trie<T: Serialize + DeserializeOwned + Debug> {
     root: Node<T>,
     len: usize,
@@ -78,6 +117,12 @@ impl<T: Serialize + DeserializeOwned + Debug> Trie<T> {
 
 
     /// トライ木をダブル配列に変換する
+    ///
+    /// # Panics
+    /// dataをバイト列に変換できなかった場合にpanicする。
+    ///
+    /// # Errors
+    ///
     ///
     /// # Arguments
     ///

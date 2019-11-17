@@ -5,8 +5,8 @@ use std::env;
 use std::str::FromStr;
 use std::time::Instant;
 
-use dary::double_array::DoubleArray;
-use dary::trie::Trie;
+use dary::DoubleArray;
+use dary::Trie;
 
 use rand::{Rng, thread_rng};
 use rand::distributions::Alphanumeric;

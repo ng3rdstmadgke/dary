@@ -3,8 +3,8 @@ use std::fs;
 use std::path::PathBuf;
 use std::fmt::Debug;
 
-use dary::double_array::DoubleArray;
-use dary::trie::Trie;
+use dary::DoubleArray;
+use dary::Trie;
 
 use rand::{Rng, thread_rng};
 use rand::distributions::Alphanumeric;
