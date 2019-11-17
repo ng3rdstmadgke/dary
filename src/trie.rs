@@ -1,6 +1,6 @@
 use std::fmt::Debug;
 
-use crate::bit_cache::BitCache;
+use super::bit_cache::BitCache;
 use crate::double_array::DoubleArray;
 
 use bincode;

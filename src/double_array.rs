@@ -15,7 +15,7 @@ use serde::Serialize;
 use serde::de::DeserializeOwned;
 
 #[derive(Debug)]
-pub struct DoubleArrayHeader {
+struct DoubleArrayHeader {
     base_idx  : usize,
     check_idx : usize,
     data_idx  : usize,
