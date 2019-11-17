@@ -3,6 +3,11 @@ name = "dary"
 version = "0.1.0"
 authors = ["ng3rdstmadgke <ng3rdstmadgke@gmail.com>"]
 edition = "2018"
+license = "MIT"
+description = "This crate provides double-array construction and search functions."
+categories = ["algorithms"]
+keywords = ["double array", "trie", "morphological analysis"]
+
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
