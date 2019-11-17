@@ -2,12 +2,12 @@
 # dary
 
 ## Description
-daryはダブル配列の構築及び、検索を実装したライブラリです。
+daryはダブル配列の構築及び、検索を実装したライブラリです。  
 
 ## Benchmark
-トライ木の構築、ダブル配列の構築、ダブル配列の検索などのベンチマークを行います。
-benchmark 1 では `MorphemeData { surface: String, cost usize }` をデータとして登録したときのベンチマークを行います。
-benchmark 2 では `u32` をデータとして登録したときのベンチマークを行います。
+トライ木の構築、ダブル配列の構築、ダブル配列の検索などのベンチマークを行います。  
+benchmark 1 では `MorphemeData { surface: String, cost usize }` をデータとして登録したときのベンチマークを行います。  
+benchmark 2 では `u32` をデータとして登録したときのベンチマークを行います。  
 
 ```bash
 # [usage]
